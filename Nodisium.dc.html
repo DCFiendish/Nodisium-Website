@@ -13,8 +13,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-<script src="https://unpkg.com/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
 <style>
   body { margin:0; background:#08070C; color:#EDE9F2; font-family:'IBM Plex Sans',system-ui,sans-serif; text-wrap:pretty; -webkit-font-smoothing:antialiased; }
   a { color:#F2C230; text-decoration:none; }
@@ -561,78 +559,132 @@ class Component extends DCLogic {
   }
 
   componentDidMount() {
-    this.tick = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    // the countdown is only on Home — don't re-render the tree every second elsewhere
+    this.tick = setInterval(() => {
+      if (this.state.tab === 'home' && !document.hidden) this.setState({ now: Date.now() });
+    }, 1000);
     this.hunt = setInterval(() => this.startGlobe(), 400);
+    this.loadEarth();
+    this.onVis = () => { const c = this.wired; if (c && c.isConnected) this.paint(c); };
+    document.addEventListener('visibilitychange', this.onVis);
     this.startGlobe();
   }
   componentDidUpdate() { this.startGlobe(); }
-  componentWillUnmount() { clearInterval(this.tick); clearInterval(this.hunt); cancelAnimationFrame(this.raf); }
+  componentWillUnmount() {
+    clearInterval(this.tick); clearInterval(this.hunt); cancelAnimationFrame(this.raf);
+    document.removeEventListener('visibilitychange', this.onVis);
+    if (this.io) this.io.disconnect();
+  }
 
   startGlobe() {
     const c = document.querySelector('[data-globe]');
     this.canvas = c;
     if (!c || (c === this.wired && c.isConnected)) return;
     this.wired = c;
-    this.rot = 0;
+    if (this.rot == null) this.rot = 0;
+    clearInterval(this.hunt); // acquired — componentDidUpdate re-acquires on tab return
+    this.onScreen = true;
+    if (this.io) this.io.disconnect();
+    this.io = new IntersectionObserver(es => { this.onScreen = es[0].isIntersecting; });
+    this.io.observe(c);
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const loop = () => {
-      if (!c.isConnected) { this.wired = null; return; }
-      if (!reduce) this.rot += 0.0022 * (this.props.globeSpeed ?? 1);
-      this.paint(c);
+    this.paint(c); // always land one frame, whatever the gates say
+    let last = 0;
+    const loop = (t) => {
+      if (!c.isConnected) { this.wired = null; if (this.io) this.io.disconnect(); this.hunt = setInterval(() => this.startGlobe(), 400); return; }
       this.raf = requestAnimationFrame(loop);
+      // ~30fps cap; nothing drawn while backgrounded or scrolled out of the hero
+      if (document.hidden || !this.onScreen || t - last < 32) { last = 0; return; }
+      const dt = last ? Math.min(80, t - last) : 16;
+      last = t;
+      if (!reduce) this.rot += 0.000135 * dt * (this.props.globeSpeed ?? 1);
+      this.paint(c);
     };
     cancelAnimationFrame(this.raf);
-    loop();
+    requestAnimationFrame(loop);
   }
 
+  // Natural Earth 110m coastlines/borders (public domain). Decoded inline so the page
+  // carries no d3/topojson payload — we only need rings of lon/lat to stroke.
   loadEarth() {
     if (this.earthTried) return;
     this.earthTried = true;
-    const wait = (n) => {
-      if (window.d3 && window.topojson) {
-        fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
-          .then(r => r.json())
-          .then(t => {
-            this.land = window.topojson.feature(t, t.objects.countries);
-            this.borders = window.topojson.mesh(t, t.objects.countries, (a, b) => a !== b);
-          })
-          .catch(() => {});
-      } else if (n < 80) setTimeout(() => wait(n + 1), 120);
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
+      .then(r => r.json())
+      .then(t => {
+        this.rings = this.decodeTopo(t);
+        if (this.wired && this.wired.isConnected) this.paint(this.wired); // first real frame, ungated
+      })
+      .catch(() => {});
+  }
+
+  decodeTopo(t) {
+    const sx = t.transform.scale[0], sy = t.transform.scale[1];
+    const tx = t.transform.translate[0], ty = t.transform.translate[1];
+    const arcs = t.arcs.map(arc => {
+      let x = 0, y = 0;
+      return arc.map(d => { x += d[0]; y += d[1]; return [x * sx + tx, y * sy + ty]; });
+    });
+    const rings = [];
+    const addRing = idxs => {
+      const pts = [];
+      idxs.forEach(i => {
+        const a = i < 0 ? arcs[~i].slice().reverse() : arcs[i];
+        for (let k = pts.length ? 1 : 0; k < a.length; k++) pts.push(a[k]);
+      });
+      if (pts.length > 2) rings.push(pts);
     };
-    wait(0);
+    t.objects.countries.geometries.forEach(g => {
+      if (g.type === 'Polygon') g.arcs.forEach(addRing);
+      else if (g.type === 'MultiPolygon') g.arcs.forEach(p => p.forEach(addRing));
+    });
+    return rings;
   }
 
   paintEarth(ctx, w, h, R, cx, cy, gold) {
-    const d3 = window.d3;
-    const proj = d3.geoOrthographic().scale(R).translate([cx, cy])
-      .rotate([this.rot * 180 / Math.PI, -16, 0]).clipAngle(90);
-    const path = d3.geoPath(proj, ctx);
-    ctx.beginPath(); path({ type: 'Sphere' });
+    const RAD = Math.PI / 180, TAU = Math.PI * 2;
+    const cp = Math.cos(-0.3), sp = Math.sin(-0.3), rot = this.rot;
+    const proj = (lon, lat) => {
+      const la = lat * RAD, lo = lon * RAD + rot, cl = Math.cos(la);
+      const x = cl * Math.sin(lo), y0 = Math.sin(la), z0 = cl * Math.cos(lo);
+      return [cx + x * R, cy - (y0 * cp - z0 * sp) * R, y0 * sp + z0 * cp];
+    };
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU);
     ctx.fillStyle = this.rgba(gold, 0.025); ctx.fill();
     ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.3); ctx.stroke();
-    ctx.beginPath(); path(d3.geoGraticule10());
-    ctx.lineWidth = 0.6; ctx.strokeStyle = this.rgba(gold, 0.14); ctx.stroke();
-    if (this.land) {
-      ctx.beginPath(); path(this.land);
-      ctx.fillStyle = this.rgba(gold, 0.14); ctx.fill();
-      ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.85); ctx.stroke();
-    }
-    if (this.borders) {
-      ctx.beginPath(); path(this.borders);
-      ctx.lineWidth = 0.5; ctx.strokeStyle = this.rgba(gold, 0.4); ctx.stroke();
-    }
-    const marks = [[-9.6, 30.4], [-3.7, 40.4], [2.35, 48.86], [13.4, 52.5], [-0.13, 51.5], [12.5, 41.9], [-5.9, 35.8]];
-    path.pointRadius(2.4);
-    marks.forEach(([lon, lat], i) => {
-      const pulse = 0.55 + 0.45 * Math.sin(this.state.now / 600 + i);
-      ctx.beginPath(); path({ type: 'Point', coordinates: [lon, lat] });
-      ctx.fillStyle = this.rgba(gold, 0.9); ctx.fill();
-      const p = proj([lon, lat]);
-      if (p && d3.geoDistance([lon, lat], [-proj.rotate()[0], -proj.rotate()[1]]) < Math.PI / 2) {
-        ctx.beginPath(); ctx.arc(p[0], p[1], 7 + 5 * pulse, 0, Math.PI * 2);
-        ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.22 * pulse); ctx.stroke();
+
+    const trace = pts => {
+      let pen = false;
+      for (let i = 0; i < pts.length; i++) {
+        const p = proj(pts[i][0], pts[i][1]);
+        if (p[2] > 0) { pen ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); pen = true; }
+        else pen = false;
       }
-    });
+    };
+
+    ctx.beginPath();
+    for (let lat = -60; lat <= 60; lat += 30) {
+      const r = []; for (let lon = -180; lon <= 180; lon += 6) r.push([lon, lat]); trace(r);
+    }
+    for (let lon = -180; lon < 180; lon += 30) {
+      const r = []; for (let lat = -90; lat <= 90; lat += 6) r.push([lon, lat]); trace(r);
+    }
+    ctx.lineWidth = 0.6; ctx.strokeStyle = this.rgba(gold, 0.13); ctx.stroke();
+
+    ctx.beginPath();
+    for (let i = 0; i < this.rings.length; i++) trace(this.rings[i]);
+    ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.82); ctx.stroke();
+
+    const marks = [[-9.6, 30.4], [-3.7, 40.4], [2.35, 48.86], [13.4, 52.5], [-0.13, 51.5], [12.5, 41.9], [-5.9, 35.8]];
+    for (let i = 0; i < marks.length; i++) {
+      const p = proj(marks[i][0], marks[i][1]);
+      if (p[2] <= 0.02) continue;
+      const pulse = 0.55 + 0.45 * Math.sin(this.state.now / 600 + i);
+      ctx.beginPath(); ctx.arc(p[0], p[1], 2.4, 0, TAU);
+      ctx.fillStyle = this.rgba(gold, 0.9); ctx.fill();
+      ctx.beginPath(); ctx.arc(p[0], p[1], 7 + 5 * pulse, 0, TAU);
+      ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.22 * pulse * p[2]); ctx.stroke();
+    }
   }
 
   paint(c) {
@@ -646,8 +698,8 @@ class Component extends DCLogic {
     const R = Math.min(w * 0.30, h * 0.40), cx = w / 2, cy = h * 0.5;
     const rot = this.rot, tilt = -0.36;
     const gold = this.props.accent ?? '#F2C230';
-    this.loadEarth();
-    if (window.d3) { this.paintEarth(ctx, w, h, R, cx, cy, gold); return; }
+    // real geometry once it lands; the wireframe below is the fallback until then
+    if (this.rings) { this.paintEarth(ctx, w, h, R, cx, cy, gold); return; }
     const proj = (lat, lon) => {
       const la = lat * Math.PI / 180, lo = lon * Math.PI / 180 + rot;
       const x = Math.cos(la) * Math.sin(lo), y0 = Math.sin(la), z0 = Math.cos(la) * Math.cos(lo);
