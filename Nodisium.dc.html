@@ -13,6 +13,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
 <style>
   body { margin:0; background:#08070C; color:#EDE9F2; font-family:'IBM Plex Sans',system-ui,sans-serif; text-wrap:pretty; -webkit-font-smoothing:antialiased; }
   a { color:#F2C230; text-decoration:none; }
@@ -69,9 +71,9 @@
           Pre-launch · Java 1.21
         </div>
         <h1 class="nd-r" style="font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:clamp(64px,15vw,196px);line-height:.9;letter-spacing:-.03em;margin:clamp(18px,3vw,30px) 0 0;color:#F7F4FB;text-shadow:0 0 90px rgba(242,194,48,.16)">Nodisium</h1>
-        <p class="nd-r" style="max-width:52ch;margin:22px auto 0;font-size:clamp(15px,1.5vw,17.5px);line-height:1.7;color:#A79FB8">A geopolitical Towny world where borders are drawn by treaty, redrawn by war, and held only as long as your nation can hold them. Found a town. Build an economy. Or take someone else's.</p>
+        <p class="nd-r" style="max-width:56ch;margin:22px auto 0;font-size:clamp(15px,1.5vw,17.5px);line-height:1.7;color:#A79FB8">July 1911. The <em style="font-style:normal;color:#C9C2D6">Panther</em> drops anchor off Agadir and nobody blinks first. The powers never step back from the brink — and the world that follows is yours to redraw. Found a nation, sign the treaties you mean to break, and hold what you take.</p>
         <div class="nd-r" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:clamp(26px,4vw,38px)">
-          <button type="button" onClick="{{ goWaitlist }}" style="background:#F2C230;color:#0B0910;border:0;border-radius:3px;padding:14px 24px;font-size:14px;font-weight:600;letter-spacing:.02em;cursor:pointer" style-hover="background:#FFD968;transform:translateY(-1px)">Join the waitlist</button>
+          <button type="button" onClick="{{ goShop }}" style="background:#F2C230;color:#0B0910;border:0;border-radius:3px;padding:14px 24px;font-size:14px;font-weight:600;letter-spacing:.02em;cursor:pointer" style-hover="background:#FFD968;transform:translateY(-1px)">Visit the shop</button>
           <button type="button" onClick="{{ goRules }}" style="background:transparent;color:#EDE9F2;border:1px solid #2E2740;border-radius:3px;padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer" style-hover="border-color:#F2C230;color:#F2C230">Read the laws</button>
         </div>
       </div>
@@ -117,29 +119,6 @@
       </div>
     </section>
 
-    <section id="waitlist" style="border-bottom:1px solid #1C1728;background:#0A0810">
-      <div style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,92px) clamp(18px,4vw,40px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:clamp(28px,5vw,64px);align-items:center">
-        <div>
-          <h2 style="font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,52px);line-height:1.05;margin:0;color:#F7F4FB">Claim your seat<br />before the borders do.</h2>
-          <p style="font-size:15px;line-height:1.75;color:#A79FB8;margin:18px 0 0;max-width:46ch">Waitlisted players get whitelist access one hour early — long enough to pick your ground before the first nation is declared.</p>
-        </div>
-        <div>
-          <sc-if value="{{ notJoined }}" hint-placeholder-val="{{ true }}">
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <input value="{{ email }}" onChange="{{ setEmail }}" type="email" placeholder="you@example.com" aria-label="Email address" style="flex:1;min-width:200px;background:#0E0B18;border:1px solid #2E2740;border-radius:3px;padding:14px 16px;color:#EDE9F2;font-family:'IBM Plex Sans',sans-serif;font-size:14px;outline:none" style-focus="border-color:#F2C230" />
-              <button type="button" onClick="{{ join }}" style="background:#F2C230;color:#0B0910;border:0;border-radius:3px;padding:14px 26px;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#FFD968">Join</button>
-            </div>
-          </sc-if>
-          <sc-if value="{{ joined }}" hint-placeholder-val="{{ false }}">
-            <div style="border:1px solid rgba(242,194,48,.35);background:rgba(242,194,48,.06);border-radius:3px;padding:18px 20px;display:flex;gap:12px;align-items:center;animation:nd-fade .4s both">
-              <div style="width:9px;height:9px;background:#F2C230;transform:rotate(45deg)"></div>
-              <div style="font-size:14px;color:#EDE9F2">You're on the list. Watch your inbox the day the countdown ends.</div>
-            </div>
-          </sc-if>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#7E7591;margin-top:14px;letter-spacing:.04em">{{ waitlistCount }} players waiting · no spam, one email at launch</div>
-        </div>
-      </div>
-    </section>
   </main>
   </sc-if>
 
@@ -177,9 +156,9 @@
     <div style="margin-top:clamp(32px,4vw,48px);border:1px dashed #3A3150;padding:clamp(22px,3vw,32px);display:flex;gap:20px;align-items:center;justify-content:space-between;flex-wrap:wrap">
       <div>
         <div style="font-family:'Instrument Serif',Georgia,serif;font-size:26px;color:#F7F4FB">Think a ruling was wrong?</div>
-        <div style="font-size:14px;color:#A79FB8;margin-top:8px">Every ban gets one appeal, reviewed by a staff member who wasn't involved.</div>
+        <div style="font-size:14px;color:#A79FB8;margin-top:8px">Open a ticket in the <span style="color:#C9C2D6">#appeals</span> channel on Discord. Every ban gets one appeal, reviewed by a staff member who wasn't involved.</div>
       </div>
-      <button type="button" style="background:transparent;color:#F2C230;border:1px solid #F2C230;border-radius:3px;padding:13px 22px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" style-hover="background:#F2C230;color:#0B0910">Submit an appeal</button>
+      <button type="button" style="background:transparent;color:#F2C230;border:1px solid #F2C230;border-radius:3px;padding:13px 22px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" style-hover="background:#F2C230;color:#0B0910">Submit an appeal in Discord</button>
     </div>
   </main>
   </sc-if>
@@ -606,6 +585,56 @@ class Component extends DCLogic {
     loop();
   }
 
+  loadEarth() {
+    if (this.earthTried) return;
+    this.earthTried = true;
+    const wait = (n) => {
+      if (window.d3 && window.topojson) {
+        fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
+          .then(r => r.json())
+          .then(t => {
+            this.land = window.topojson.feature(t, t.objects.countries);
+            this.borders = window.topojson.mesh(t, t.objects.countries, (a, b) => a !== b);
+          })
+          .catch(() => {});
+      } else if (n < 80) setTimeout(() => wait(n + 1), 120);
+    };
+    wait(0);
+  }
+
+  paintEarth(ctx, w, h, R, cx, cy, gold) {
+    const d3 = window.d3;
+    const proj = d3.geoOrthographic().scale(R).translate([cx, cy])
+      .rotate([this.rot * 180 / Math.PI, -16, 0]).clipAngle(90);
+    const path = d3.geoPath(proj, ctx);
+    ctx.beginPath(); path({ type: 'Sphere' });
+    ctx.fillStyle = this.rgba(gold, 0.025); ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.3); ctx.stroke();
+    ctx.beginPath(); path(d3.geoGraticule10());
+    ctx.lineWidth = 0.6; ctx.strokeStyle = this.rgba(gold, 0.14); ctx.stroke();
+    if (this.land) {
+      ctx.beginPath(); path(this.land);
+      ctx.fillStyle = this.rgba(gold, 0.14); ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.85); ctx.stroke();
+    }
+    if (this.borders) {
+      ctx.beginPath(); path(this.borders);
+      ctx.lineWidth = 0.5; ctx.strokeStyle = this.rgba(gold, 0.4); ctx.stroke();
+    }
+    const marks = [[-9.6, 30.4], [-3.7, 40.4], [2.35, 48.86], [13.4, 52.5], [-0.13, 51.5], [12.5, 41.9], [-5.9, 35.8]];
+    path.pointRadius(2.4);
+    marks.forEach(([lon, lat], i) => {
+      const pulse = 0.55 + 0.45 * Math.sin(this.state.now / 600 + i);
+      ctx.beginPath(); path({ type: 'Point', coordinates: [lon, lat] });
+      ctx.fillStyle = this.rgba(gold, 0.9); ctx.fill();
+      const p = proj([lon, lat]);
+      if (p && d3.geoDistance([lon, lat], [-proj.rotate()[0], -proj.rotate()[1]]) < Math.PI / 2) {
+        ctx.beginPath(); ctx.arc(p[0], p[1], 7 + 5 * pulse, 0, Math.PI * 2);
+        ctx.lineWidth = 1; ctx.strokeStyle = this.rgba(gold, 0.22 * pulse); ctx.stroke();
+      }
+    });
+  }
+
   paint(c) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = c.clientWidth, h = c.clientHeight;
@@ -617,6 +646,8 @@ class Component extends DCLogic {
     const R = Math.min(w * 0.30, h * 0.40), cx = w / 2, cy = h * 0.5;
     const rot = this.rot, tilt = -0.36;
     const gold = this.props.accent ?? '#F2C230';
+    this.loadEarth();
+    if (window.d3) { this.paintEarth(ctx, w, h, R, cx, cy, gold); return; }
     const proj = (lat, lon) => {
       const la = lat * Math.PI / 180, lo = lon * Math.PI / 180 + rot;
       const x = Math.cos(la) * Math.sin(lo), y0 = Math.sin(la), z0 = Math.cos(la) * Math.cos(lo);
@@ -812,15 +843,9 @@ class Component extends DCLogic {
       pillars: [
         { num: '01', title: 'Nations', body: 'Towns federate into nations with real chartered borders. Elect a leader, write your own tax code, and decide who may cross your claims — every treaty is recorded on the public ledger.' },
         { num: '02', title: 'War', body: 'Declarations are formal and public: siege windows, war goals, and terms of surrender. No offline raiding, no surprise wipes. If you lose land, you lost it in a war everyone could watch.' },
-        { num: '03', title: 'Economy', body: 'A player-run market with no admin shop. Nations mint their own treasuries, tax trade at their borders, and the wealth leaderboard reflects who actually built something worth taxing.' },
+        { num: '03', title: 'PvP', body: 'Combat is skill-based and consequential: no purchasable gear, no god kits, no safe-zone hopping mid-fight. Deaths inside a siege count toward the war goal, and every kill you land is on the public record.' },
       ],
-      email: this.state.email,
-      setEmail: e => this.setState({ email: e.target.value }),
-      join: () => { if (/.+@.+\..+/.test(this.state.email)) this.setState({ joined: true }); },
-      joined: this.state.joined,
-      notJoined: !this.state.joined,
-      waitlistCount: '1,284',
-      goWaitlist: () => { const el = document.getElementById('waitlist'); if (el) window.scrollTo({ top: el.offsetTop - 70, behavior: 'smooth' }); },
+      goShop: () => this.go('shop'),
       goRules: () => this.go('rules'),
       ipBtnLabel: this.state.copied ? 'Copied ✓' : 'Copy IP',
       copyIp: () => {
